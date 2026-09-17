@@ -12,13 +12,15 @@ body{display:flex;align-items:center;justify-content:center;font-family:monospac
 #wrap{position:relative;width:100vw;height:100dvh;overflow:hidden;background:#09090d}
 canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
 button{font:inherit;color:#ddd6c4;background:#111116;border:2px solid #777;touch-action:none}
-#joystick{display:none;position:absolute;left:24px;bottom:30px;width:112px;height:112px;border:3px solid #777;border-radius:50%;background:#111116dd;z-index:5}
-#nub{position:absolute;left:34px;top:34px;width:38px;height:38px;border-radius:50%;background:#ddd6c4}
-#interact{display:none;position:absolute;right:28px;bottom:45px;width:76px;height:76px;border:3px solid #777;border-radius:50%;font-size:22px;z-index:5}
-#combatButtons{position:absolute;left:50%;bottom:15px;transform:translateX(-50%);display:none;gap:5px;z-index:6}
-.action{width:69px;height:43px;font-size:10px;font-weight:bold}
-.action.sel{border-color:#eee}
-#titleButtons{position:absolute;left:50%;top:62%;transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:8px;width:150px;z-index:7}
+#arrowPad{display:none;position:absolute;left:16px;bottom:20px;width:142px;height:116px;z-index:5}
+.arrow{position:absolute;width:46px;height:38px;border:2px solid #777;border-radius:7px;background:#111116dd;color:#ddd6c4;font-size:22px;line-height:30px;padding:0}
+#up{left:48px;top:0}.left{left:0;top:39px}.right{right:0;top:39px}.down{left:48px;bottom:0}
+#interact{display:none;position:absolute;right:18px;bottom:28px;width:72px;height:72px;border:3px solid #777;border-radius:50%;font-size:20px;z-index:5}
+#combatButtons{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:none;gap:6px;width:min(96vw,360px);justify-content:center;z-index:6}
+.action{width:82px;height:46px;font-size:10px;font-weight:bold;border-radius:5px}
+.action.sel{border-color:#eee;background:#202026}
+#titleButtons{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:12px;width:min(230px,70vw);z-index:7}
+#titleButtons button{height:50px;font-size:14px;border-radius:5px}
 #titleButtons button{height:42px}
 #toast{position:absolute;left:50%;top:7px;transform:translateX(-50%);font-size:9px;z-index:8;pointer-events:none;white-space:nowrap}
 @media (min-width:700px){
@@ -32,7 +34,12 @@ button{font:inherit;color:#ddd6c4;background:#111116;border:2px solid #777;touch
 <canvas id="game" width="320" height="180"></canvas>
 <div id="toast"></div>
 
-<div id="joystick"><div id="nub"></div></div>
+<div id="arrowPad">
+ <button class="arrow" id="up">▲</button>
+ <button class="arrow left" id="left">◀</button>
+ <button class="arrow right" id="right">▶</button>
+ <button class="arrow down" id="down">▼</button>
+</div>
 <button id="interact">E</button>
 
 <div id="combatButtons">
@@ -62,7 +69,7 @@ const ctx=canvas.getContext("2d");
 ctx.imageSmoothingEnabled=false;
 
 const UI={
- joystick:document.getElementById("joystick"),
+ arrowPad:document.getElementById("arrowPad"),
  nub:document.getElementById("nub"),
  interact:document.getElementById("interact"),
  combat:document.getElementById("combatButtons"),
@@ -186,27 +193,17 @@ window.addEventListener("keyup",e=>{
  if(k==="e"||k===" ") interactHeld=false;
 });
 
-function setStickFromPointer(e){
- const r=UI.joystick.getBoundingClientRect();
- const cx=r.left+r.width/2,cy=r.top+r.height/2;
- let dx=e.clientX-cx,dy=e.clientY-cy;
- const max=r.width*.30;
- const len=Math.hypot(dx,dy)||1;
- if(len>max){dx=dx/len*max;dy=dy/len*max}
- move.x=dx/max;move.y=dy/max;
- UI.nub.style.transform=`translate(${dx}px,${dy}px)`;
- joystickActive=true;
+function setMoveButton(key, value){
+  keys[key]=value;
 }
-function releaseStick(){
- joystickActive=false;move.x=0;move.y=0;
- UI.nub.style.transform="translate(0,0)";
-}
-UI.joystick.addEventListener("pointerdown",e=>{
- e.preventDefault();UI.joystick.setPointerCapture(e.pointerId);setStickFromPointer(e);
+["up","down","left","right"].forEach(id=>{
+  const el=document.getElementById(id);
+  const key=id;
+  el.addEventListener("pointerdown",e=>{e.preventDefault();el.setPointerCapture(e.pointerId);setMoveButton(key,true)});
+  el.addEventListener("pointerup",e=>{e.preventDefault();setMoveButton(key,false)});
+  el.addEventListener("pointercancel",()=>setMoveButton(key,false));
+  el.addEventListener("pointerleave",()=>setMoveButton(key,false));
 });
-UI.joystick.addEventListener("pointermove",e=>{if(joystickActive)setStickFromPointer(e)});
-UI.joystick.addEventListener("pointerup",releaseStick);
-UI.joystick.addEventListener("pointercancel",releaseStick);
 
 UI.interact.addEventListener("pointerdown",e=>{e.preventDefault();interactHeld=true});
 UI.interact.addEventListener("pointerup",e=>{e.preventDefault();interactHeld=false;doInteract()});
@@ -215,7 +212,11 @@ UI.interact.addEventListener("pointercancel",()=>interactHeld=false);
 document.querySelectorAll(".action").forEach(btn=>{
  btn.addEventListener("pointerdown",e=>{
   e.preventDefault();
-  if(!battle || battle.phase!=="menu") return;
+  if(!battle || (battle.phase!=="menu" && battle.phase!=="attack")) return;
+  if(battle.phase==="attack"){
+    if(btn.dataset.action==="fight") confirmAttack();
+    return;
+  }
   selectedAction=btn.dataset.action;
   updateActionButtons();
   chooseAction(selectedAction);
@@ -223,7 +224,10 @@ document.querySelectorAll(".action").forEach(btn=>{
 });
 
 function updateActionButtons(){
- document.querySelectorAll(".action").forEach(b=>b.classList.toggle("sel",b.dataset.action===selectedAction));
+ document.querySelectorAll(".action").forEach(b=>{
+   b.classList.toggle("sel",b.dataset.action===selectedAction);
+   b.style.opacity=(battle && battle.phase==="attack" && b.dataset.action!=="fight")?"0.45":"1";
+ });
 }
 
 /* ---------- Title / intro ---------- */
@@ -232,7 +236,7 @@ document.getElementById("newGame").addEventListener("pointerdown",e=>{
  game=defaultState();
  game.scene="intro";
  UI.title.style.display="none";
- UI.joystick.style.display="block";
+ UI.arrowPad.style.display="block";
  UI.interact.style.display="block";
  say("There is no light above you.",4);
 });
@@ -253,13 +257,13 @@ function showTitle(){
 } catch(err) {
   UI.continueBtn.style.display="none";
 }
- UI.joystick.style.display="none";
+ UI.arrowPad.style.display="none";
  UI.interact.style.display="none";
  UI.combat.style.display="none";
 }
 
 function startIntro(){
- UI.joystick.style.display="block";
+ UI.arrowPad.style.display="block";
  UI.interact.style.display="block";
  say("You wake beneath the bones.",3);
  game.storyFlags.introSeen=true;
@@ -275,11 +279,8 @@ const fossil={x:260,y:55};
 const dinoSpawn={x:160,y:80};
 
 function updateExploration(dt){
- let mx=move.x,my=move.y;
- if(!joystickActive){
-  mx=(keys.right?1:0)-(keys.left?1:0);
-  my=(keys.down?1:0)-(keys.up?1:0);
- }
+ let mx=(keys.right?1:0)-(keys.left?1:0);
+ let my=(keys.down?1:0)-(keys.up?1:0);
  const len=Math.hypot(mx,my);
  if(len){
   game.player.x=clamp(game.player.x+mx/len*70*dt,15,305);
@@ -298,6 +299,12 @@ function doInteract(){
   introStep++;
   if(introStep>=1) finishIntro();
   else startIntro();
+  return;
+ }
+ if(game.scene==="battleResult"){
+  battle=null;
+  game.scene="room";
+  say("The cave grows quiet.",2);
   return;
  }
  if(game.scene!=="room") return;
@@ -325,6 +332,9 @@ function beginBattle(enemyId){
   phase:"menu",
   timer:0,
   actStep:0,
+  attackCursor:110,
+  attackDir:1,
+  attackSpeed:155,
   heart:{x:160,y:135},
   bullets:[],
   attackSeed:0,
@@ -340,6 +350,8 @@ function beginBattle(enemyId){
 
 function endBattle(result){
  const species=battle.enemy.species;
+ battle.result=result;
+ battle.phase="result";
  UI.combat.style.display="none";
  UI.interact.style.display="block";
  if(result==="kill"){
@@ -356,8 +368,7 @@ function endBattle(result){
   game.karma++;
   say(`${species} is captured without being killed.`,3);
  }
- game.scene="room";
- battle=null;
+ game.scene="battleResult";
  saveSilent();
 }
 
@@ -369,11 +380,11 @@ function chooseAction(action){
  if(!battle || battle.phase!=="menu") return;
 
  if(action==="fight"){
-  const damage=Math.max(1,Math.round(10*(1+Math.min(game.kills,10)*.02)));
-  battle.hp=clamp(battle.hp-damage,0,battle.enemy.maxHp);
-  if(battle.hp<=0){endBattle("kill");return}
-  say("Your strike lands.",1.5);
-  startEnemyAttack();
+  battle.phase="attack";
+  battle.timer=0;
+  battle.attackCursor=110;
+  battle.attackDir=1;
+  say("TIME YOUR STRIKE — TAP FIGHT",2);
  }
 
  if(action==="act"){
@@ -403,6 +414,25 @@ function chooseAction(action){
  }
 }
 
+function confirmAttack(){
+ if(!battle || battle.phase!=="attack") return;
+ const center=160;
+ const distance=Math.abs(battle.attackCursor-center);
+ const quality=clamp(1-distance/50,0,1);
+ const base=10;
+ const damage=Math.max(1,Math.round(base*(0.55+quality*0.85)*(1+Math.min(game.kills,10)*0.02)));
+ battle.hp=clamp(battle.hp-damage,0,battle.enemy.maxHp);
+ const grade=quality>.88?"PERFECT":quality>.62?"GREAT":quality>.32?"OK":"WEAK";
+ if(battle.hp<=0){
+   say(`${grade} HIT! ${damage} DAMAGE`,2);
+   setTimeout(()=>endBattle("kill"),650);
+   battle.phase="resultWait";
+   return;
+ }
+ say(`${grade} HIT! ${damage} DAMAGE`,1.5);
+ startEnemyAttack();
+}
+
 function startEnemyAttack(){
  battle.phase="dodge";
  battle.timer=0;
@@ -425,6 +455,13 @@ function startEnemyAttack(){
 
 function updateBattle(dt){
  if(!battle)return;
+
+ if(battle.phase==="attack"){
+   battle.attackCursor += battle.attackDir*battle.attackSpeed*dt;
+   if(battle.attackCursor>=210){battle.attackCursor=210;battle.attackDir=-1}
+   if(battle.attackCursor<=110){battle.attackCursor=110;battle.attackDir=1}
+   return;
+ }
 
  if(battle.phase==="dodge"){
   let mx=move.x,my=move.y;
@@ -486,8 +523,9 @@ function draw(){
  else if(game.scene==="intro") drawIntro();
  else if(game.scene==="room") drawRoom();
  else if(game.scene==="battle") drawBattle();
+ else if(game.scene==="battleResult") drawBattleResult();
 
- if(messageTimer>0){
+ if(messageTimer>0 && game.scene!=="battleResult"){
   rect(8,145,304,27,"#111116");
   txt(message,14,157,7);
   txt("KARMA "+game.karma+"  KILLS "+game.kills+"  ROUTE "+route().toUpperCase(),14,168,6);
@@ -563,13 +601,35 @@ function drawBattle(){
  ctx.lineWidth=1;
  ctx.strokeRect(108,92,104,57);
 
- if(battle.phase==="dodge"){
+ if(battle.phase==="attack"){
+  txt("STOP THE METER AT CENTER",160,84,7,"center");
+  rect(108,105,104,8,"#2b2b31");
+  rect(158,103,4,12,"#ddd6c4");
+  rect(battle.attackCursor-2,102,4,14,"#ddd6c4");
+  txt("WEAK        OK       GREAT       PERFECT",160,125,5,"center");
+ }else if(battle.phase==="dodge"){
   for(const b of battle.bullets)rect(b.x-2,b.y-2,4,4,"#d5cdbb");
   rect(battle.heart.x-3,battle.heart.y-3,6,6,"#f0e5c9");
-  txt("DODGE",160,85,7,"center");
+  txt("DODGE — MOVE THE HEART",160,85,7,"center");
  }else{
   txt(message||"Choose an action.",160,107,7,"center");
  }
+}
+
+function drawBattleResult(){
+ rect(10,18,300,145,"#15151b");
+ txt("ENCOUNTER COMPLETE",160,32,10,"center");
+ txt(battle?.enemy?.name||"DINOSAUR",160,49,9,"center");
+ if(battle){
+   const e=battle.enemy;
+   txt(e.species+" • "+e.variant,160,63,6,"center");
+   txt("HP: "+e.maxHp+"   ATTACK: "+e.baseDamage,160,76,6,"center");
+   txt("PATTERN: "+e.attackPattern.toUpperCase(),160,87,6,"center");
+   txt("ACT: "+e.actOptions.join(" / "),160,98,6,"center");
+ }
+ txt("KARMA "+game.karma+"   KILLS "+game.kills+"   SPARED "+game.spared,160,114,6,"center");
+ txt("ROUTE: "+route().toUpperCase(),160,125,7,"center");
+ txt("TAP E TO CONTINUE",160,145,8,"center");
 }
 
 /* ---------- Main loop ---------- */
