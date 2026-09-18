@@ -1,0 +1,1361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#09090d">
+<title>Below the Bones</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#09090d;touch-action:none}
+body{display:flex;align-items:center;justify-content:center;font-family:monospace;color:#ddd6c4}
+#wrap{position:relative;width:100vw;height:100dvh;overflow:hidden;background:#09090d;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+button{font:inherit;color:#ddd6c4;background:#111116;border:2px solid #777;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;-webkit-user-drag:none;user-drag:none}
+#arrowPad{display:none;position:absolute;left:18px;bottom:18px;width:150px;height:150px;z-index:10}
+#joystickBase{position:absolute;left:0;top:0;width:150px;height:150px;border:3px solid #777;border-radius:50%;background:#111116cc;box-shadow:inset 0 0 0 8px #09090dcc;touch-action:none}
+#joystickKnob{position:absolute;left:50%;top:50%;width:62px;height:62px;margin-left:-31px;margin-top:-31px;border:3px solid #8a8a8f;border-radius:50%;background:#2a2a31;color:#ddd6c4;box-shadow:inset 0 0 0 5px #111116;pointer-events:none;transition:transform .04s linear}
+#joystickBase:active{background:#18181ecc}
+#interact{z-index:30;display:none;position:absolute;right:18px;bottom:28px;width:78px;height:78px;border:3px solid #777;border-radius:50%;font-size:20px;z-index:5}
+#combatButtons{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);display:none;gap:5px;width:min(94vw,360px);justify-content:center;z-index:12;flex-wrap:wrap}
+.action{width:82px;height:43px;font-size:10px;font-weight:bold;border-radius:5px}
+.action.sel{border-color:#eee;background:#202026}
+#titleButtons{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:12px;width:min(230px,70vw);z-index:7}
+#titleButtons button{height:50px;font-size:14px;border-radius:5px}
+#titleButtons button{height:42px}
+#toast{position:absolute;left:50%;top:7px;transform:translateX(-50%);font-size:9px;z-index:8;pointer-events:none;white-space:nowrap}
+@media (min-width:700px){
+ #arrowPad{left:5vw;bottom:5vh}
+ #interact{right:5vw;bottom:6vh}
+}
+#itemMenu{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,330px);padding:14px;border:2px solid #ddd6c4;background:#09090d;color:#ddd6c4;z-index:50;text-align:center;font-family:monospace}
+#itemMenu button{width:100%;height:42px;margin-top:8px;border:2px solid #777;border-radius:5px;background:#111116;color:#ddd6c4;font:inherit}
+#itemMenu button:disabled{opacity:.45}
+#msg{position:absolute;left:50%;bottom:178px;transform:translateX(-50%);width:88%;text-align:center;z-index:20;font-size:12px;pointer-events:none}
+/* Mobile game surfaces must never enter browser text-selection mode. */
+html,body,#wrap,canvas,button,.arrow,.action,#joystickBase,#joystickKnob{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+
+/* ---------- Landscape mobile layout ---------- */
+@media (orientation: landscape) and (max-height: 700px){
+  body{align-items:center;justify-content:center}
+  #wrap{width:100vw;height:100dvh}
+  canvas{
+    left:0;top:0;right:auto;bottom:auto;inset:auto;
+    width:100vw;height:100dvh;
+    transform:none;
+    display:block;
+  }
+  #arrowPad{
+    left:16px;bottom:12px;width:128px;height:128px;
+  }
+  #joystickBase{width:128px;height:128px}
+  #joystickKnob{width:54px;height:54px;margin-left:-27px;margin-top:-27px}
+  #interact{
+    right:14px;bottom:14px;width:64px;height:64px;font-size:18px;
+  }
+  #combatButtons{
+    left:50%;bottom:8px;width:min(62vw,430px);
+    gap:4px;flex-wrap:nowrap;
+  }
+  .action{width:78px;height:38px;font-size:9px}
+  #itemMenu{width:min(52vw,360px);max-height:86dvh;overflow:auto}
+  #msg{bottom:64px;width:min(70vw,520px);font-size:10px}
+}
+@media (orientation: landscape) and (min-height: 701px){
+  canvas{
+    left:0;top:0;right:auto;bottom:auto;inset:auto;
+    width:100vw;height:100dvh;
+    transform:none;
+    display:block;
+  }
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="game" width="320" height="180"></canvas>
+<div id="toast"></div>
+
+<div id="arrowPad">
+ <div id="joystickBase" aria-label="Movement joystick">
+  <div id="joystickKnob"></div>
+ </div>
+</div>
+<button id="interact">E</button>
+
+<div id="combatButtons">
+ <button class="action sel" data-action="fight">FIGHT</button>
+ <button class="action" data-action="act">ACT</button>
+ <button class="action" data-action="item">ITEM</button>
+ <button class="action" data-action="capture">CAPTURE</button>
+ <button class="action" data-action="mercy">MERCY</button>
+</div>
+
+<div id="itemMenu">
+ <div style="font-size:18px;margin-bottom:10px">ITEMS</div>
+ <button id="candyUse">CANDY — HEAL 5 HP × <span id="candyCount">3</span></button>
+ <div id="itemMessage" style="min-height:18px;margin-top:8px;font-size:10px"></div>
+ <button id="itemClose">BACK</button>
+</div>
+
+<div id="titleButtons">
+ <button id="newGame">NEW GAME</button>
+ <button id="continueGame">CONTINUE</button>
+</div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   BELOW THE BONES — CORE PROTOTYPE v0.5
+   Data-driven, mobile-first, GitHub Pages compatible.
+   ========================================================= */
+
+const W=320,H=180;
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+ctx.imageSmoothingEnabled=false;
+
+const UI={
+ arrowPad:document.getElementById("arrowPad"),
+  interact:document.getElementById("interact"),
+ combat:document.getElementById("combatButtons"),
+ title:document.getElementById("titleButtons"),
+ continueBtn:document.getElementById("continueGame"),
+ toast:document.getElementById("toast")
+};
+
+/* ---------- Enemy data ---------- */
+const ENEMIES={
+ coelophysis:{
+  id:"coelophysis",
+  name:"COELOPHYSIS",
+  species:"Coelophysis",
+  variant:"Scout",
+  maxHp:32,
+  baseDamage:1,
+  captureAt:16,
+  attackPattern:"bite_combo",
+  actOptions:["OBSERVE","CALM"],
+  dialogue:[
+   "The small theropod watches your hands.",
+   "It keeps one foot ready to run.",
+   "Its eyes flick toward the cave entrance."
+  ]
+ },
+ velociraptor:{
+  id:"velociraptor",
+  name:"VELOCIRAPTOR",
+  species:"Velociraptor",
+  variant:"Stray",
+  maxHp:38,
+  baseDamage:1,
+  captureAt:19,
+  attackPattern:"raptor_combo",
+  actOptions:["OBSERVE","CALM"],
+  dialogue:[
+   "The raptor lowers its head and studies your movement.",
+   "Its sickle claw stays clear of the stone.",
+   "It circles, waiting to see if you will attack."
+  ]
+ }
+};
+
+/* ---------- Area data ---------- */
+const ROOMS={
+ bone_chamber:{
+  name:"BONE CHAMBER",
+  fossil:{x:260,y:55},
+  dino:{x:160,y:80},
+  entrance:{x:160,y:30},
+  exitRoom:"raptor_gallery",
+  exitPrompt:"A passage opens between the bones. TAP E TO ENTER.",
+  encounter:"coelophysis"
+ },
+ raptor_gallery:{
+  name:"RAPTOR GALLERY",
+  fossil:{x:55,y:55},
+  dino:{x:245,y:105},
+  entrance:{x:160,y:138},
+  exitRoom:"bone_chamber",
+  exitPrompt:"The passage behind you leads back to the Bone Chamber. TAP E.",
+  encounter:"velociraptor"
+ }
+};
+
+function currentRoom(){return ROOMS[game.room]||ROOMS.bone_chamber}
+
+/* ---------- Persistent game state ---------- */
+const defaultState=()=>({
+ version:1,
+ scene:"title",
+ room:"bone_chamber",
+ player:{x:160,y:116,hp:20,maxHp:20},
+ karma:0,
+ kills:0,
+ spared:0,
+ captured:0,
+ speciesEncountered:{},
+ speciesExtinct:{},
+ storyFlags:{introSeen:false,room1Complete:false},
+ items:{candy:3},
+ saved:false
+});
+
+let game=defaultState();
+
+function loadGame(){
+ try{
+  const raw=localStorage.getItem("belowTheBonesSave");
+  if(!raw) return false;
+  const data=JSON.parse(raw);
+  game=Object.assign(defaultState(),data);
+  game.player=Object.assign(defaultState().player,data.player||{});
+  game.speciesEncountered=data.speciesEncountered||{};
+  game.speciesExtinct=data.speciesExtinct||{};
+  game.storyFlags=data.storyFlags||{};
+  game.items=Object.assign({candy:3},data.items||{});
+  return true;
+ }catch(err){
+  console.warn("Save load failed:",err);
+  game=defaultState();
+  return false;
+ }
+}
+
+function saveGame(){
+ try{
+  game.saved=true;
+  localStorage.setItem("belowTheBonesSave",JSON.stringify(game));
+  showToast("MEMORY FOSSIL: JOURNEY RECORDED");
+ }catch(err){
+  showToast("THE FOSSIL CANNOT HOLD YOUR MEMORY.");
+ }
+}
+
+/* ---------- Runtime state ---------- */
+let battle=null;
+let selectedAction="fight";
+let message="";
+let messageTimer=0;
+let introStep=0;
+let move={x:0,y:0};
+let interactHeld=false;
+let interactLatch=false;
+let actionPointerReady=true;
+let keys={left:false,right:false,up:false,down:false};
+let last=performance.now();
+window.addEventListener("resize",()=>{
+  // Force a fresh layout after phone rotation without changing the game's 320x180 logic.
+  document.documentElement.style.setProperty("--orientation-width", String(window.innerWidth));
+  document.documentElement.style.setProperty("--orientation-height", String(window.innerHeight));
+});
+
+/* ---------- Items ---------- */
+const itemMenu=document.getElementById("itemMenu");
+const candyCount=document.getElementById("candyCount");
+const candyUse=document.getElementById("candyUse");
+const itemClose=document.getElementById("itemClose");
+const itemMessage=document.getElementById("itemMessage");
+
+function updateItemMenu(){
+  const count=Number(game.items?.candy??0);
+  candyCount.textContent=String(count);
+  candyUse.disabled=count<=0 || game.player.hp>=game.player.maxHp;
+}
+
+function openItemMenu(){
+  if(!battle || battle.phase!=="menu") return;
+  itemMenu.style.display="block";
+  UI.combat.style.display="none";
+  itemMessage.textContent="";
+  updateItemMenu();
+}
+
+function closeItemMenu(){
+  itemMenu.style.display="none";
+  if(battle && battle.phase==="menu") UI.combat.style.display="flex";
+}
+
+candyUse.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  if(!battle || battle.phase!=="menu") return;
+  const count=Number(game.items?.candy??0);
+  if(count<=0){itemMessage.textContent="You have no Candy left.";return}
+  if(game.player.hp>=game.player.maxHp){itemMessage.textContent="Your HP is already full.";return}
+  game.items.candy=count-1;
+  game.player.hp=Math.min(game.player.maxHp,game.player.hp+5);
+  saveSilent();
+  itemMessage.textContent="You ate the Candy. +5 HP.";
+  say("You ate the Candy. You feel better.",1.6);
+  updateItemMenu();
+  setTimeout(()=>{
+    if(!battle || battle.phase!=="menu") return;
+    closeItemMenu();
+    startEnemyAttack();
+  },650);
+});
+
+itemClose.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  closeItemMenu();
+});
+
+/* ---------- Utilities ---------- */
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function dist(ax,ay,bx,by){return Math.hypot(ax-bx,ay-by)}
+function say(t,seconds=3){message=t;messageTimer=seconds}
+function showToast(t){
+ UI.toast.textContent=t;
+ clearTimeout(showToast.timer);
+ showToast.timer=setTimeout(()=>UI.toast.textContent="",1800);
+}
+function route(){
+ if(game.kills>=10 && game.kills>game.spared+game.captured) return "genocide";
+ if(game.spared>=10 && game.kills===0) return "pacifist";
+ return "neutral";
+}
+
+/* ---------- Input ---------- */
+// Prevent Android/Chrome long-press selection and context menus on game controls.
+document.addEventListener("contextmenu",e=>e.preventDefault());
+document.addEventListener("selectstart",e=>e.preventDefault());
+document.addEventListener("dragstart",e=>e.preventDefault());
+
+window.addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ if(["arrowleft","a"].includes(k)) keys.left=true;
+ if(["arrowright","d"].includes(k)) keys.right=true;
+ if(["arrowup","w"].includes(k)) keys.up=true;
+ if(["arrowdown","s"].includes(k)) keys.down=true;
+ if(k==="e"||k===" "){e.preventDefault();interactHeld=true}
+});
+window.addEventListener("keyup",e=>{
+ const k=e.key.toLowerCase();
+ if(["arrowleft","a"].includes(k)) keys.left=false;
+ if(["arrowright","d"].includes(k)) keys.right=false;
+ if(["arrowup","w"].includes(k)) keys.up=false;
+ if(["arrowdown","s"].includes(k)) keys.down=false;
+ if(k==="e"||k===" ") interactHeld=false;
+});
+
+const joystickBase=document.getElementById("joystickBase");
+const joystickKnob=document.getElementById("joystickKnob");
+let joystickPointer=null;
+function resetJoystick(){
+  joystickPointer=null;
+  keys.up=keys.down=keys.left=keys.right=false;
+  joystickKnob.style.transform="translate(0px,0px)";
+}
+function updateJoystick(e){
+  const r=joystickBase.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let dx=e.clientX-cx, dy=e.clientY-cy;
+  const max=r.width*0.29;
+  const len=Math.hypot(dx,dy);
+  if(len>max){dx=dx/len*max;dy=dy/len*max}
+  joystickKnob.style.transform=`translate(${dx}px,${dy}px)`;
+  const nx=dx/max, ny=dy/max;
+  const dead=.20;
+  keys.left=nx < -dead;
+  keys.right=nx > dead;
+  keys.up=ny < -dead;
+  keys.down=ny > dead;
+}
+joystickBase.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  joystickPointer=e.pointerId;
+  joystickBase.setPointerCapture(e.pointerId);
+  updateJoystick(e);
+});
+joystickBase.addEventListener("pointermove",e=>{
+  if(e.pointerId!==joystickPointer)return;
+  e.preventDefault();
+  updateJoystick(e);
+});
+const releaseJoystick=e=>{
+  if(joystickPointer!==e.pointerId)return;
+  e.preventDefault();
+  resetJoystick();
+};
+joystickBase.addEventListener("pointerup",releaseJoystick);
+joystickBase.addEventListener("pointercancel",releaseJoystick);
+joystickBase.addEventListener("lostpointercapture",resetJoystick);
+
+UI.interact.addEventListener("pointerdown",e=>{
+ e.preventDefault();
+ if(interactLatch) return;
+ interactHeld=true;
+ interactLatch=true;
+ doInteract();
+});
+
+function releaseInteract(e){
+ if(e) e.preventDefault();
+ interactHeld=false;
+ interactLatch=false;
+}
+UI.interact.addEventListener("pointerup",releaseInteract);
+UI.interact.addEventListener("pointercancel",releaseInteract);
+
+document.querySelectorAll(".action").forEach(btn=>{
+ btn.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  if(!actionPointerReady || !battle) return;
+  actionPointerReady=false;
+  // Unlock after the tap has been processed instead of relying on pointerup.
+  // This is more reliable on mobile browsers.
+  setTimeout(()=>{ actionPointerReady=true; },180);
+
+  if(battle.phase==="attack"){
+    if(btn.dataset.action==="fight") confirmAttack();
+    return;
+  }
+
+  if(battle.phase==="actResult"){
+    // A separate tap on ACT is required after the result is displayed.
+    if(btn.dataset.action==="act") startEnemyAttack();
+    return;
+  }
+
+  if(battle.phase!=="menu") return;
+  selectedAction=btn.dataset.action;
+  updateActionButtons();
+  chooseAction(selectedAction);
+ });
+});
+
+function updateActionButtons(){
+ document.querySelectorAll(".action").forEach(b=>{
+   b.classList.toggle("sel",b.dataset.action===selectedAction);
+   b.style.opacity=(battle && battle.phase==="attack" && b.dataset.action!=="fight")?"0.45":"1";
+ });
+}
+
+/* ---------- Title / intro ---------- */
+document.getElementById("newGame").addEventListener("pointerdown",e=>{
+ e.preventDefault();
+ game=defaultState();
+ game.scene="intro";
+ introStep=0;
+ battle=null;
+ interactHeld=false;
+ interactLatch=false;
+ keys={left:false,right:false,up:false,down:false};
+ UI.title.style.display="none";
+ hideAllControls();
+ startIntro();
+});
+
+UI.continueBtn.addEventListener("pointerdown",e=>{
+ e.preventDefault();
+ if(loadGame()){
+  game.scene="room";
+  battle=null;
+  interactHeld=false;
+  interactLatch=false;
+  keys={left:false,right:false,up:false,down:false};
+  UI.title.style.display="none";
+  hideAllControls();
+  showExploreControls();
+  say("The memory returns.",3);
+ }
+});
+
+function showTitle(){
+ itemMenu.style.display="none";
+ UI.title.style.display="flex";
+ try {
+  UI.continueBtn.style.display=localStorage.getItem("belowTheBonesSave")?"block":"none";
+} catch(err) {
+  UI.continueBtn.style.display="none";
+}
+ UI.arrowPad.style.display="none";
+ UI.interact.style.display="none";
+ UI.combat.style.display="none";
+}
+
+function startIntro(){
+ UI.arrowPad.style.display="none";
+ UI.combat.style.display="none";
+ UI.interact.style.display="block";
+ say("You wake beneath the bones.",3);
+ game.storyFlags.introSeen=true;
+}
+
+function finishIntro(){
+ game.scene="room";
+ introStep=0;
+ showExploreControls();
+ say("Something moves in the chamber.",3);
+}
+
+/* ---------- Exploration ---------- */
+
+function updateExploration(dt){
+ const room=currentRoom();
+ let mx=(keys.right?1:0)-(keys.left?1:0);
+ let my=(keys.down?1:0)-(keys.up?1:0);
+ const len=Math.hypot(mx,my);
+ if(len){
+  game.player.x=clamp(game.player.x+mx/len*70*dt,15,305);
+  game.player.y=clamp(game.player.y+my/len*70*dt,38,138);
+ }
+
+ // The doorway is deliberately an interaction point rather than an
+ // automatic warp, so the player gets a clear pause before changing areas.
+ const nearExit=dist(game.player.x,game.player.y,room.entrance.x,room.entrance.y)<24;
+ if(nearExit){
+  say(room.exitPrompt,1.5);
+ }
+ // Keyboard/touch-hold fallback: pointer input triggers directly on pointerdown.
+ // The latch guarantees one interaction per press.
+ if(interactHeld && !interactLatch){
+  interactLatch=true;
+  doInteract();
+ }
+ if(!interactHeld) interactLatch=false;
+}
+
+function doInteract(){
+ if(game.scene==="title") return;
+ if(game.scene==="intro"){
+  introStep++;
+  if(introStep>=1) finishIntro();
+  else startIntro();
+  return;
+ }
+ if(game.scene==="battleResult"){
+  battle=null;
+  game.scene="room";
+  showExploreControls();
+  say("The cave grows quiet.",2);
+  return;
+ }
+ if(game.scene!=="room") return;
+
+ const room=currentRoom();
+ const pf=dist(game.player.x,game.player.y,room.fossil.x,room.fossil.y);
+ const pd=dist(game.player.x,game.player.y,room.dino.x,room.dino.y);
+ const pe=dist(game.player.x,game.player.y,room.entrance.x,room.entrance.y);
+
+ if(pe<24){
+  const next=room.exitRoom;
+  game.room=next;
+  if(next==="raptor_gallery") game.storyFlags.room1Complete=true;
+  const nextRoom=currentRoom();
+  game.player.x=160;
+  game.player.y=next==="raptor_gallery"?132:45;
+  saveSilent();
+  say(`You enter the ${nextRoom.name}.`,2.5);
+ }else if(pf<20){
+  saveGame();
+ }else if(pd<26){
+  beginBattle(room.encounter);
+ }else{
+  say("Nothing happens.",1.5);
+ }
+}
+
+/* ---------- Combat ---------- */
+function beginBattle(enemyId){
+ itemMenu.style.display="none";
+ const e=ENEMIES[enemyId];
+ game.speciesEncountered[e.species]=(game.speciesEncountered[e.species]||0)+1;
+ battle={
+  enemyId,
+  enemy:e,
+  hp:e.maxHp,
+  phase:"menu",
+  timer:0,
+  actStep:0,
+  attackCursor:110,
+  attackDir:1,
+  attackSpeed:155,
+  heart:{x:160,y:135},
+  bullets:[],
+  attackSeed:0,
+  damageCooldown:0
+ };
+ game.scene="battle";
+ actionPointerReady=true;
+ syncCombatControls();
+ selectedAction="fight";
+ updateActionButtons();
+ say(`${e.name} approaches.`,2.5);
+}
+
+function endBattle(result){
+ itemMenu.style.display="none";
+ const species=battle.enemy.species;
+ battle.result=result;
+ battle.phase="result";
+ UI.combat.style.display="none";
+ UI.interact.style.display="block";
+ if(result==="kill"){
+  game.kills++;
+  game.karma--;
+  game.speciesExtinct[species]=(game.speciesExtinct[species]||0)+1;
+  say(`${species} is gone. The chamber feels larger.`,3);
+ }else if(result==="spare"){
+  game.spared++;
+  game.karma++;
+  say(`You leave ${species} alive. It retreats into the dark.`,3);
+ }else if(result==="capture"){
+  game.captured++;
+  game.karma++;
+  say(`${species} is captured without being killed.`,3);
+ }
+ game.scene="battleResult";
+ hideExploreControls();
+ UI.interact.style.display="block";
+ saveSilent();
+}
+
+function saveSilent(){
+ try{localStorage.setItem("belowTheBonesSave",JSON.stringify(game))}catch(e){}
+}
+
+function chooseAction(action){
+ if(!battle || battle.phase!=="menu") return;
+
+ if(action==="item"){
+  openItemMenu();
+  return;
+ }
+
+ if(action==="fight"){
+  battle.phase="attack";
+  battle.timer=0;
+  battle.attackCursor=110;
+  battle.attackDir=1;
+  say("TIME YOUR STRIKE — TAP FIGHT",2);
+ }
+
+ if(action==="act"){
+  battle.actStep++;
+  const dialogueIndex=Math.min(battle.actStep-1,battle.enemy.dialogue.length-1);
+  battle.lastAct=battle.enemy.dialogue[dialogueIndex];
+  battle.phase="actResult";
+  battle.timer=0;
+  say(battle.lastAct,2.2);
+ }
+
+ if(action==="capture"){
+  // Capture depends on the dinosaur being weakened, not on the player's HP.
+  // ACT is helpful but is not required to make the mechanic usable.
+  if(battle.hp<=battle.enemy.captureAt){
+   endBattle("capture");
+  }else{
+   say("It is too strong to capture yet.",2);
+   startEnemyAttack();
+  }
+ }
+
+ if(action==="mercy"){
+  // Mercy becomes available after enough ACTs, or once the dinosaur is
+  // sufficiently weakened.
+  if(battle.actStep>=2 || battle.hp<=battle.enemy.captureAt){
+   endBattle("spare");
+  }else{
+   say("It does not trust you yet. Try ACT.",2);
+   startEnemyAttack();
+  }
+ }
+}
+
+function confirmAttack(){
+ if(!battle || battle.phase!=="attack") return;
+ const center=160;
+ const distance=Math.abs(battle.attackCursor-center);
+ const quality=clamp(1-distance/50,0,1);
+ const base=10;
+ const damage=Math.max(1,Math.round(base*(0.55+quality*0.85)*(1+Math.min(game.kills,10)*0.02)));
+ battle.hp=clamp(battle.hp-damage,0,battle.enemy.maxHp);
+ const grade=quality>.88?"PERFECT":quality>.62?"GREAT":quality>.32?"OK":"WEAK";
+ if(battle.hp<=0){
+   say(`${grade} HIT! ${damage} DAMAGE`,2);
+   setTimeout(()=>endBattle("kill"),650);
+   battle.phase="resultWait";
+   return;
+ }
+ say(`${grade} HIT! ${damage} DAMAGE`,1.5);
+ startEnemyAttack();
+}
+
+function startEnemyAttack(){
+ battle.phase="dodge";
+ actionPointerReady=true;
+ syncCombatControls();
+ battle.timer=0;
+ battle.attackSeed++;
+ battle.bullets=[];
+ battle.damageCooldown=0;
+
+ // Coelophysis signature turn: CUBES -> BITE -> CUBES -> BITE.
+ // Each sub-attack must be survived before the next one begins.
+ if(battle.enemy.attackPattern==="bite_combo"){
+  battle.patternStep=0;
+  battle.patternTimer=0;
+  battle.patternMode="cubes";
+  battle.biteLane=0;
+  battle.biteHit=false;
+  spawnCoelophysisCubes();
+  return;
+ }
+
+ // Velociraptor signature turn: CLAW SWIPES -> CUBES -> CLAW AOE.
+ if(battle.enemy.attackPattern==="raptor_combo"){
+  battle.patternStep=0;
+  battle.patternTimer=0;
+  battle.patternMode="swipe";
+  battle.swipeIndex=0;
+  battle.swipeOrientation="horizontal";
+  battle.swipePos=118;
+  battle.swipeHit=false;
+  battle.aoeIndex=0;
+  battle.aoeSpots=[];
+  chooseRaptorSwipe();
+  return;
+ }
+
+ spawnBasicCubes();
+}
+
+function spawnBasicCubes(){
+ const count=6+Math.min(4,game.kills);
+ const arena={left:108,right:212,top:92,bottom:149};
+ battle.bullets=[];
+ for(let i=0;i<count;i++){
+  const side=i%2===0?-1:1;
+  const targetY=103+(i%6)*7;
+  battle.bullets.push({
+   x:side<0?105:215,
+   y:clamp(targetY,arena.top+4,arena.bottom-4),
+   vx:side<0?(45+i*4):-(45+i*4),
+   vy:Math.sin(i*1.7)*8
+  });
+ }
+}
+
+function spawnCoelophysisCubes(){
+ // Slightly different scatter from the generic attack so the signature
+ // sequence still has a recognizable first phase.
+ const count=6;
+ const arena={left:108,right:212,top:92,bottom:149};
+ battle.bullets=[];
+ for(let i=0;i<count;i++){
+  const side=i%2===0?-1:1;
+  battle.bullets.push({
+   x:side<0?105:215,
+   y:clamp(99+(i*9)%45,arena.top+4,arena.bottom-4),
+   vx:side<0?(50+i*3):-(50+i*3),
+   vy:(i%2===0?1:-1)*(7+(i%3)*3)
+  });
+ }
+}
+
+function chooseRaptorSwipe(){
+ const i=battle.swipeIndex||0;
+ // Each swipe is a three-claw formation. The player must stay in one of
+ // the two gaps between the parallel slashes. The formation shifts and
+ // reverses its diagonal direction between waves.
+ battle.swipeAngle=(i%2===0)?-0.58:0.58;
+ battle.swipeGap=17;
+ battle.swipeCenterX=160+Math.floor(Math.random()*15)-7;
+ battle.swipeStartX=battle.swipeCenterX-34;
+ battle.swipeEndX=battle.swipeCenterX+34;
+ battle.swipeTimer=0;
+ battle.swipeHit=false;
+}
+
+function pointToSegmentDistance(px,py,x1,y1,x2,y2){
+ const dx=x2-x1, dy=y2-y1;
+ const len2=dx*dx+dy*dy;
+ let t=len2?((px-x1)*dx+(py-y1)*dy)/len2:0;
+ t=clamp(t,0,1);
+ const x=x1+t*dx, y=y1+t*dy;
+ return Math.hypot(px-x,py-y);
+}
+
+function raptorSwipeLines(offset){
+ const angle=battle.swipeAngle||0;
+ const slope=Math.tan(angle);
+ const centers=[battle.swipeCenterX-18,battle.swipeCenterX,battle.swipeCenterX+18];
+ const lines=[];
+ for(const cx of centers){
+  const x=cx+offset;
+  const yTop=94, yBottom=147;
+  lines.push({x1:x-slope*(yTop-120),y1:yTop,x2:x-slope*(yBottom-120),y2:yBottom});
+ }
+ return lines;
+}
+
+function chooseRaptorAoeSpots(){
+ const spots=[];
+ const candidates=[];
+ for(let row=0;row<3;row++){
+  for(let col=0;col<4;col++){
+   candidates.push({x:121+col*26,y:104+row*18});
+  }
+ }
+ while(spots.length<4){
+  const pick=candidates[Math.floor(Math.random()*candidates.length)];
+  if(!spots.some(s=>s.x===pick.x&&s.y===pick.y)) spots.push(pick);
+ }
+ battle.aoeSpots=spots;
+ battle.aoeIndex=0;
+ battle.aoeTimer=0;
+ battle.aoeHit=false;
+}
+
+function updateBattle(dt){
+ if(!battle)return;
+
+ if(battle.phase==="actResult"){
+   // Wait for the player to acknowledge the ACT result.
+   // No automatic transition: ACT must be tapped again to dodge.
+   return;
+ }
+
+ if(battle.phase==="attack"){
+   battle.attackCursor += battle.attackDir*battle.attackSpeed*dt;
+   if(battle.attackCursor>=210){battle.attackCursor=210;battle.attackDir=-1}
+   if(battle.attackCursor<=110){battle.attackCursor=110;battle.attackDir=1}
+   return;
+ }
+
+ if(battle.phase==="dodge"){
+  let mx=(keys.right?1:0)-(keys.left?1:0);
+  let my=(keys.down?1:0)-(keys.up?1:0);
+  const len=Math.hypot(mx,my);
+  if(len){
+   battle.heart.x=clamp(battle.heart.x+mx/len*105*dt,112,208);
+   battle.heart.y=clamp(battle.heart.y+my/len*105*dt,98,145);
+  }
+
+  battle.timer+=dt;
+  battle.damageCooldown=Math.max(0,battle.damageCooldown-dt);
+
+  // Coelophysis signature sequence: basic cubes -> bite -> basic cubes -> bite.
+  if(battle.enemy.attackPattern==="bite_combo"){
+   battle.patternTimer+=dt;
+
+   if(battle.patternMode==="cubes"){
+    const arena={left:108,right:212,top:92,bottom:149};
+    for(const b of battle.bullets){
+     b.x+=b.vx*dt;
+     b.y+=b.vy*dt;
+     if(b.x<arena.left-4||b.x>arena.right+4){
+      b.vx*=-1;
+      b.x=clamp(b.x,arena.left-4,arena.right+4);
+     }
+     if(b.y<arena.top+4||b.y>arena.bottom-4){
+      b.vy*=-1;
+      b.y=clamp(b.y,arena.top+4,arena.bottom-4);
+     }
+     if(dist(b.x,b.y,battle.heart.x,battle.heart.y)<6 && battle.damageCooldown<=0){
+      const damage=Math.max(0,Number(battle.enemy.baseDamage)||0);
+      game.player.hp=Math.max(0,game.player.hp-damage);
+      battle.damageCooldown=.45;
+      say(`The attack hits you for ${damage}.`,.7);
+     }
+    }
+
+    if(battle.patternTimer>=2.5){
+     battle.patternStep++;
+     battle.patternTimer=0;
+     battle.patternMode="bite";
+     battle.bullets=[];
+     battle.biteHit=false;
+     battle.biteLane=Math.random()<0.5?0:1;
+    }
+   }else if(battle.patternMode==="bite"){
+    // One fast half-arena snap. Each bite independently chooses upper or lower.
+    const telegraph=.42, active=.55;
+    const snapping=battle.patternTimer>=telegraph && battle.patternTimer<telegraph+active;
+    const dangerousTop=battle.biteLane===0;
+    const dangerous=dangerousTop ? battle.heart.y<120 : battle.heart.y>=120;
+
+    if(snapping && !battle.biteHit && dangerous && battle.damageCooldown<=0){
+     const damage=Math.max(0,Number(battle.enemy.baseDamage)||0);
+     game.player.hp=Math.max(0,game.player.hp-damage);
+     battle.damageCooldown=.45;
+     battle.biteHit=true;
+     say(`SNAP! The Coelophysis bites for ${damage}.`,.8);
+    }
+
+    if(battle.patternTimer>=telegraph+active+.18){
+     battle.patternStep++;
+     battle.patternTimer=0;
+     battle.bullets=[];
+     battle.biteHit=false;
+
+     if(battle.patternStep>=4){
+      battle.phase="menu";
+      actionPointerReady=true;
+      syncCombatControls();
+      battle.patternMode=null;
+      say("The Coelophysis pauses after its attack sequence.",1.5);
+     }else{
+      battle.patternMode="cubes";
+      spawnCoelophysisCubes();
+     }
+    }
+   }
+
+   if(game.player.hp<=0){
+    game.player.hp=game.player.maxHp;
+    battle.phase="menu";
+    say("You collapse, then wake beside the Memory Fossil.",3);
+    game.scene="room";
+    battle=null;
+    hideAllControls();
+    UI.interact.style.display="block";
+    return;
+   }
+   return;
+  }
+
+  // Velociraptor signature sequence: 3 claw swipes, cubes, then 4 claw strikes.
+  if(battle.enemy.attackPattern==="raptor_combo"){
+   const arena={left:108,right:212,top:92,bottom:149};
+   battle.patternTimer+=dt;
+
+   if(battle.patternMode==="swipe"){
+    battle.swipeTimer+=dt;
+    const telegraph=.42, active=.62;
+    const activeNow=battle.swipeTimer>=telegraph && battle.swipeTimer<telegraph+active;
+    if(activeNow && !battle.swipeHit && battle.damageCooldown<=0){
+     const progress=clamp((battle.swipeTimer-telegraph)/active,0,1);
+     const offset=battle.swipeStartX+(battle.swipeEndX-battle.swipeStartX)*progress-battle.swipeCenterX;
+     const lines=raptorSwipeLines(offset);
+     // Collision uses the exact same progress/duration as the rendered claw.
+     // The telegraph/trail is never dangerous; only the visible active slash is.
+     // The heart only takes damage when it actually touches the claw stroke.
+     // The heart is 6px wide, so its effective radius is about 3px.
+     const hit=lines.some(line=>pointToSegmentDistance(battle.heart.x,battle.heart.y,line.x1,line.y1,line.x2,line.y2)<5);
+     if(hit){
+      const damage=7;
+      game.player.hp=Math.max(0,game.player.hp-damage);
+      battle.damageCooldown=.45;
+      battle.swipeHit=true;
+      say(`CLAW SWIPE! It hits for ${damage}.`,.7);
+     }
+    }
+    if(battle.swipeTimer>=telegraph+active+.18){
+     battle.swipeIndex++;
+     if(battle.swipeIndex>=3){
+      battle.patternMode="cubes";
+      battle.patternStep=0;
+      battle.patternTimer=0;
+      spawnBasicCubes();
+     }else{
+      chooseRaptorSwipe();
+     }
+    }
+   }else if(battle.patternMode==="cubes"){
+    for(const b of battle.bullets){
+     b.x+=b.vx*dt;
+     b.y+=b.vy*dt;
+     if(b.x<arena.left-4||b.x>arena.right+4){b.vx*=-1;b.x=clamp(b.x,arena.left-4,arena.right+4)}
+     if(b.y<arena.top+4||b.y>arena.bottom-4){b.vy*=-1;b.y=clamp(b.y,arena.top+4,arena.bottom-4)}
+     if(dist(b.x,b.y,battle.heart.x,battle.heart.y)<6 && battle.damageCooldown<=0){
+      const damage=Math.max(0,Number(battle.enemy.baseDamage)||0);
+      game.player.hp=Math.max(0,game.player.hp-damage);
+      battle.damageCooldown=.45;
+      say(`The cubes hit you for ${damage}.`,.7);
+     }
+    }
+    if(battle.patternTimer>=2.5){
+     battle.patternMode="aoe";
+     battle.patternTimer=0;
+     battle.bullets=[];
+     chooseRaptorAoeSpots();
+    }
+   }else if(battle.patternMode==="aoe"){
+    battle.aoeTimer+=dt;
+    const spot=battle.aoeSpots[battle.aoeIndex];
+    const telegraph=.48, active=.30;
+    const activeNow=battle.aoeTimer>=telegraph && battle.aoeTimer<telegraph+active;
+    if(activeNow && !battle.aoeHit && battle.damageCooldown<=0 && dist(spot.x,spot.y,battle.heart.x,battle.heart.y)<14){
+     const damage=8;
+     game.player.hp=Math.max(0,game.player.hp-damage);
+     battle.damageCooldown=.45;
+     battle.aoeHit=true;
+     say(`CLAW STRIKE! It hits for ${damage}.`,.7);
+    }
+    if(battle.aoeTimer>=telegraph+active+.16){
+     battle.aoeIndex++;
+     if(battle.aoeIndex>=4){
+      battle.phase="menu";
+      actionPointerReady=true;
+      syncCombatControls();
+      battle.patternMode=null;
+      battle.aoeSpots=[];
+      say("The Velociraptor pulls its claws back.",1.5);
+     }else{
+      battle.aoeTimer=0;
+      battle.aoeHit=false;
+     }
+    }
+   }
+
+   if(game.player.hp<=0){
+    game.player.hp=game.player.maxHp;
+    battle.phase="menu";
+    say("You collapse, then wake beside the Memory Fossil.",3);
+    game.scene="room";
+    battle=null;
+    hideAllControls();
+    UI.interact.style.display="block";
+    return;
+   }
+   return;
+  }
+
+  // Generic dodge attack used by dinosaurs without a custom pattern.
+  const arena={left:108,right:212,top:92,bottom:149};
+  for(const b of battle.bullets){
+   b.x+=b.vx*dt;
+   b.y+=b.vy*dt;
+   if(b.x<arena.left-4||b.x>arena.right+4){
+    b.vx*=-1;
+    b.x=clamp(b.x,arena.left-4,arena.right+4);
+   }
+   if(b.y<arena.top+4||b.y>arena.bottom-4){
+    b.vy*=-1;
+    b.y=clamp(b.y,arena.top+4,arena.bottom-4);
+   }
+   if(dist(b.x,b.y,battle.heart.x,battle.heart.y)<6 && battle.damageCooldown<=0){
+    const damage=Math.max(0,Number(battle.enemy.baseDamage)||0);
+    game.player.hp=Math.max(0,game.player.hp-damage);
+    battle.damageCooldown=.45;
+    say(`The attack hits you for ${damage}.`,.7);
+   }
+  }
+
+  if(game.player.hp<=0){
+   game.player.hp=game.player.maxHp;
+   battle.phase="menu";
+   say("You collapse, then wake beside the Memory Fossil.",3);
+   game.scene="room";
+   battle=null;
+   hideAllControls();
+   UI.interact.style.display="block";
+   return;
+  }
+
+  if(battle.timer>=3.8){
+   battle.phase="menu";
+   actionPointerReady=true;
+   syncCombatControls();
+   battle.bullets=[];
+   say("The dinosaur waits.",1.5);
+  }
+ }
+}
+
+/* ---------- Rendering ---------- */
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function txt(s,x,y,size=8,align="left"){
+ ctx.font=`${size}px monospace`;
+ ctx.textAlign=align;
+ ctx.fillStyle="#ddd6c4";
+ ctx.fillText(s,x,y);
+}
+
+function draw(){
+ rect(0,0,W,H,"#0b0b0f");
+
+ if(game.scene==="title") drawTitle();
+ else if(game.scene==="intro") drawIntro();
+ else if(game.scene==="room") drawRoom();
+ else if(game.scene==="battle") drawBattle();
+ else if(game.scene==="battleResult") drawBattleResult();
+
+ if(messageTimer>0 && game.scene!=="battleResult"){
+  rect(8,145,304,27,"#111116");
+  txt(message,14,157,7);
+  txt("KARMA "+game.karma+"  KILLS "+game.kills+"  ROUTE "+route().toUpperCase(),14,168,6);
+ }
+}
+
+function drawTitle(){
+ rect(12,15,296,150,"#141419");
+ txt("BELOW",160,54,22,"center");
+ txt("THE BONES",160,79,22,"center");
+ txt("A DINOSAUR RPG",160,96,7,"center");
+ txt("80 creatures • 3 sections • 3 routes",160,108,6,"center");
+ txt("v0.6 AREA 2 PROTOTYPE",160,128,6,"center");
+}
+
+function drawIntro(){
+ rect(10,15,300,130,"#17171d");
+ txt("You are falling.",160,50,9,"center");
+ txt("The sound of stone fades above you.",160,68,7,"center");
+ txt("Bones surround the darkness.",160,82,7,"center");
+ txt("Something alive breathes nearby.",160,96,7,"center");
+ txt("TAP E TO CONTINUE",160,125,8,"center");
+}
+
+function drawRoom(){
+ const room=currentRoom();
+ rect(8,23,304,122,"#25252c");
+
+ /* rock pattern */
+ for(let y=30;y<142;y+=12){
+  for(let x=14;x<307;x+=18){
+   if((x+y)%36<18)rect(x,y,5,2,"#303039");
+  }
+ }
+
+ /* doorway */
+ if(game.room==="bone_chamber"){
+  rect(140,23,40,7,"#08080b");
+  txt("PASSAGE",160,39,5,"center");
+ }else{
+  rect(140,138,40,7,"#08080b");
+  txt("PASSAGE",160,133,5,"center");
+ }
+
+ /* room-specific fossil */
+ const fossil=room.fossil;
+ rect(fossil.x-9,fossil.y-6,18,12,"#746b50");
+ rect(fossil.x-4,fossil.y-3,8,6,"#c9bd88");
+ txt("MEMORY FOSSIL",fossil.x,fossil.y-13,5,"center");
+
+ /* room-specific dinosaur */
+ const dino=room.dino;
+ if(game.room==="bone_chamber"){
+  rect(dino.x-11,dino.y-7,25,10,"#748078");
+  rect(dino.x+8,dino.y-13,9,10,"#748078");
+  rect(dino.x-18,dino.y-4,9,4,"#748078");
+  rect(dino.x-6,dino.y+3,4,8,"#748078");
+  rect(dino.x+9,dino.y+3,4,8,"#748078");
+  rect(dino.x+16,dino.y-10,2,2,"#e0d6b7");
+ }else{
+  // Simple angular raptor silhouette for Area 2.
+  rect(dino.x-12,dino.y-7,25,9,"#69766f");
+  rect(dino.x+9,dino.y-12,8,8,"#69766f");
+  rect(dino.x-25,dino.y-3,14,3,"#69766f");
+  rect(dino.x-5,dino.y+2,3,10,"#69766f");
+  rect(dino.x+8,dino.y+2,3,10,"#69766f");
+  rect(dino.x+16,dino.y-9,2,2,"#e0d6b7");
+ }
+
+ /* player */
+ rect(game.player.x-3,game.player.y-5,6,8,"#e5dac0");
+ rect(game.player.x-2,game.player.y+3,4,3,"#8e684e");
+
+ txt(room.name,14,16,9);
+ txt("HP "+game.player.hp+"/"+game.player.maxHp,306,16,7,"right");
+ txt("▲ ◀ ▶ ▼  MOVE     E  INTERACT",160,141,5,"center");
+}
+
+function drawBattle(){
+ rect(8,23,304,122,"#111116");
+ txt(battle.enemy.name,14,16,9);
+ txt("HP "+battle.hp+"/"+battle.enemy.maxHp,306,16,7,"right");
+ txt("YOU HP "+game.player.hp+"/"+game.player.maxHp,14,84,7,"left");
+
+ /* dinosaur silhouette */
+ rect(130,48,58,16,"#78847c");
+ rect(178,40,16,18,"#78847c");
+ rect(120,54,15,5,"#78847c");
+ rect(142,62,5,9,"#78847c");
+ rect(176,62,5,9,"#78847c");
+ rect(192,45,3,3,"#ddd6b7");
+
+ ctx.strokeStyle="#aaa39a";
+ ctx.lineWidth=1;
+ ctx.strokeRect(108,92,104,57);
+
+ if(battle.phase==="attack"){
+  txt("TAP FIGHT WHEN THE LINE IS CENTERED",160,84,7,"center");
+  rect(108,105,104,8,"#2b2b31");
+  rect(154,102,12,14,"#45454d");
+  rect(158,103,4,12,"#ddd6c4");
+  rect(battle.attackCursor-2,102,4,14,"#ddd6c4");
+  txt("WEAK       OK       GREAT       PERFECT",160,125,5,"center");
+ }else if(battle.phase==="actResult"){
+  txt("YOU OBSERVE THE DINOSAUR",160,82,7,"center");
+  txt("ACT #"+battle.actStep,160,93,6,"center");
+  const info=(battle.lastAct||"It watches you carefully.");
+  const words=info.split(" ");
+  let line="", lines=[];
+  for(const word of words){
+   const test=line?line+" "+word:word;
+   if(test.length>38){ lines.push(line); line=word; }
+   else line=test;
+  }
+  if(line) lines.push(line);
+  lines.slice(0,3).forEach((ln,i)=>txt(ln,160,105+i*9,6,"center"));
+  txt("RELEASE ACT, THEN TAP ACT TO DODGE",160,135,5,"center");
+ }else if(battle.phase==="dodge"){
+  if(battle.enemy.attackPattern==="bite_combo"){
+   const step=battle.patternStep||0;
+   if(battle.patternMode==="cubes"){
+    for(const b of battle.bullets)rect(b.x-2,b.y-2,4,4,"#d5cdbb");
+    txt(step===0?"DODGE THE CUBES":"CUBES",160,85,7,"center");
+   }else{
+    const telegraph=.42, active=.55;
+    const snapping=battle.patternTimer>=telegraph && battle.patternTimer<telegraph+active;
+    const top=(battle.biteLane||0)===0;
+    const y1=top?94:120, y2=top?121:147;
+    if(!snapping){
+     rect(110,top?95:121,100,25,"#26262d");
+     txt(top?"UPPER JAW":"LOWER JAW",160,top?107:136,6,"center");
+    }else{
+     rect(110,y1,100,y2-y1,"#3b3430");
+     rect(110,y1,100,3,"#8a8175");
+     rect(110,y2-3,100,3,"#8a8175");
+     for(let x=114;x<208;x+=12) rect(x,top?y2-7:y1+4,5,5,"#ddd6c4");
+     txt("BITE!",160,top?107:136,7,"center");
+    }
+   }
+   rect(battle.heart.x-3,battle.heart.y-3,6,6,"#f0e5c9");
+   txt(`COELOPHYSIS ATTACK — ${Math.min(4,step+1)}/4`,160,85,7,"center");
+  }else if(battle.enemy.attackPattern==="raptor_combo"){
+   const mode=battle.patternMode;
+   if(mode==="swipe"){
+    const telegraph=.42, active=.62;
+    const activeNow=battle.swipeTimer>=telegraph && battle.swipeTimer<telegraph+active;
+    const progress=activeNow?clamp((battle.swipeTimer-telegraph)/active,0,1):0;
+    const offset=activeNow
+      ? battle.swipeStartX+(battle.swipeEndX-battle.swipeStartX)*progress-battle.swipeCenterX
+      : -34;
+    const lines=raptorSwipeLines(offset);
+    ctx.setLineDash(activeNow?[]:[4,3]);
+    ctx.lineWidth=activeNow?5:2;
+    ctx.strokeStyle=activeNow?"#ddd6c4":"#8d877c";
+    for(const line of lines){
+     ctx.beginPath();
+     ctx.moveTo(line.x1,line.y1);
+     ctx.lineTo(line.x2,line.y2);
+     ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    txt(activeNow?"STAY IN THE GAPS":"THREE CLAWS!",160,85,7,"center");
+    txt(`RAPTOR CLAW SWIPE — ${Math.min(3,(battle.swipeIndex||0)+1)}/3`,160,157,5,"center");
+   }else if(mode==="cubes"){
+    for(const b of battle.bullets)rect(b.x-2,b.y-2,4,4,"#d5cdbb");
+    txt("RAPTOR CUBES",160,85,7,"center");
+   }else if(mode==="aoe"){
+    const telegraph=.48, active=.30;
+    const spot=battle.aoeSpots[battle.aoeIndex];
+    for(let i=0;i<battle.aoeSpots.length;i++){
+     const sp=battle.aoeSpots[i];
+     if(i===battle.aoeIndex){
+      const activeNow=battle.aoeTimer>=telegraph && battle.aoeTimer<telegraph+active;
+      ctx.strokeStyle=activeNow?"#ddd6c4":"#8d877c";ctx.lineWidth=activeNow?3:1;
+      ctx.beginPath();ctx.arc(sp.x,sp.y,13,0,Math.PI*2);ctx.stroke();
+      if(activeNow){rect(sp.x-7,sp.y-3,14,6,"#ddd6c4");rect(sp.x-3,sp.y-7,6,14,"#ddd6c4")}
+     }
+    }
+    txt(`RAPTOR CLAWS — ${Math.min(4,(battle.aoeIndex||0)+1)}/4`,160,85,7,"center");
+   }
+   rect(battle.heart.x-3,battle.heart.y-3,6,6,"#f0e5c9");
+  }else{
+   for(const b of battle.bullets)rect(b.x-2,b.y-2,4,4,"#d5cdbb");
+   rect(battle.heart.x-3,battle.heart.y-3,6,6,"#f0e5c9");
+   txt("DODGE — MOVE THE HEART",160,85,7,"center");
+  }
+ }else{
+  txt("CHOOSE YOUR ACTION",160,89,7,"center");
+  txt(message||"FIGHT / ACT / ITEM / CAPTURE / MERCY",160,104,6,"center");
+ }
+}
+
+function drawBattleResult(){
+ rect(10,18,300,145,"#15151b");
+ txt("ENCOUNTER COMPLETE",160,32,10,"center");
+ txt(battle?.enemy?.name||"DINOSAUR",160,49,9,"center");
+ if(battle){
+   const e=battle.enemy;
+   txt(e.species+" • "+e.variant,160,63,6,"center");
+   txt("HP: "+e.maxHp+"   ATTACK: "+e.baseDamage,160,76,6,"center");
+   txt("PATTERN: "+e.attackPattern.toUpperCase(),160,87,6,"center");
+   txt("ACT: "+e.actOptions.join(" / "),160,98,6,"center");
+ }
+ txt("KARMA "+game.karma+"   KILLS "+game.kills+"   SPARED "+game.spared,160,114,6,"center");
+ txt("ROUTE: "+route().toUpperCase(),160,125,7,"center");
+ txt("TAP E TO CONTINUE",160,145,8,"center");
+}
+
+/* ---------- Main loop ---------- */
+function update(dt){
+ messageTimer=Math.max(0,messageTimer-dt);
+
+ if(game.scene==="intro"){
+  /* Intro is tap-driven; no continuous movement needed. */
+ }else if(game.scene==="room"){
+  updateExploration(dt);
+ }else if(game.scene==="battle"){
+  updateBattle(dt);
+ }
+}
+
+function loop(now){
+ const dt=Math.min(.033,(now-last)/1000);
+ last=now;
+ update(dt);
+ syncCombatControls();
+ draw();
+ requestAnimationFrame(loop);
+}
+
+/* ---------- Control visibility ---------- */
+function showExploreControls(){
+ itemMenu.style.display="none";
+ UI.arrowPad.style.display="block";
+ UI.interact.style.display="block";
+}
+function hideExploreControls(){
+ UI.arrowPad.style.display="none";
+ UI.interact.style.display="none";
+}
+function hideAllControls(){
+ itemMenu.style.display="none";
+ UI.arrowPad.style.display="none";
+ UI.interact.style.display="none";
+ UI.combat.style.display="none";
+}
+
+function syncCombatControls(){
+  if(game.scene!=="battle" || !battle){
+    UI.combat.style.display="none";
+    // Exploration owns the arrows/E button; intro/title manage themselves.
+    if(game.scene==="room"){
+      UI.arrowPad.style.display="block";
+      UI.interact.style.display="block";
+    }else if(game.scene!=="intro" && game.scene!=="title" && game.scene!=="battleResult"){
+      UI.arrowPad.style.display="none";
+    }
+    return;
+  }
+
+  // Action menu and dodge arena use different touch controls.
+  if(battle.phase==="dodge"){
+    UI.combat.style.display="none";
+    UI.arrowPad.style.display="block";
+    UI.interact.style.display="none";
+  }else{
+    UI.combat.style.display="flex";
+    UI.arrowPad.style.display="none";
+    UI.interact.style.display="none";
+  }
+}
+
+/* ---------- Boot ---------- */
+function boot(){
+  // Always show the title first. Gameplay controls are enabled by startIntro().
+  try { showTitle(); } catch(err) { console.error("Boot error:", err); }
+  requestAnimationFrame(loop);
+}
+if(document.readyState==="loading") window.addEventListener("DOMContentLoaded",boot);
+else boot();
+</script>
+</body>
+</html>
